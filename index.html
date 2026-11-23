@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Probability &amp; Expected Value (EV) Simulator</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <div class="brand">
+        <div class="brand-badge">EV</div>
+        <div>
+          <h1 data-i18n="appTitle">Probability &amp; EV Simulator</h1>
+          <p class="subtitle" data-i18n="appSubtitle">Monte Carlo simulator for Expected Value, variance, bankroll path, and Theory vs. Practice</p>
+        </div>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="presets" role="group" aria-label="Scenario presets">
+          <button type="button" class="btn btn-preset active" data-preset="valuebet" data-i18n="presetValueBet">Value Bet</button>
+          <button type="button" class="btn btn-preset" data-preset="coin" data-i18n="presetCoin">Coin +EV</button>
+          <button type="button" class="btn btn-preset" data-preset="roulette" data-i18n="presetRoulette">Roulette (-EV)</button>
+        </div>
+
+        <label class="select-wrap" title="Interface language">
+          <select id="langSelect" aria-label="Language selector">
+            <option value="en" selected>EN</option>
+            <option value="ru">RU</option>
+            <option value="hy">HY</option>
+          </select>
+        </label>
+
+        <div class="fx-box" title="Exchange rate to USD and auto conversion">
+          <label class="select-wrap">
+            <select id="currencySelect" aria-label="Currency selector">
+              <option value="$" selected>$ USD</option>
+              <option value="€">€ EUR</option>
+              <option value="₽">₽ RUB</option>
+              <option value="֏">֏ AMD</option>
+            </select>
+          </label>
+          <span class="fx-label" data-i18n="fxRateLabel">Rate to $:</span>
+          <input type="number" id="fxRateInput" class="fx-input" min="0.0001" step="0.01" value="1" aria-label="Exchange rate to USD" />
+          <label class="fx-check" title="Convert payouts and bankroll automatically when switching currency">
+            <input type="checkbox" id="autoConvertFx" checked />
+            <span data-i18n="fxAutoLabel">Auto</span>
+          </label>
+        </div>
+
+        <button type="button" id="infoBtn" class="btn btn-info" title="Guide and formulas">
+          <span>ℹ️</span> <span data-i18n="infoBtnText">Info</span>
+        </button>
+
+        <button type="button" id="themeToggle" class="btn btn-icon" title="Toggle theme" aria-label="Toggle theme">
+          <span id="themeIcon">☀️</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container main-grid">
+    <!-- Left column: Outcomes & Simulation controls -->
+    <aside class="panel inputs-panel">
+      <div class="panel-header">
+        <h2 data-i18n="paramsTitle">Outcomes &amp; Simulation</h2>
+        <button type="button" id="resetBtn" class="btn btn-ghost" data-i18n="resetBtn">Reset</button>
+      </div>
+
+      <section class="input-group">
+        <div class="group-top">
+          <h3 data-i18n="secOutcomes">1. Outcomes (pᵢ &amp; Payout xᵢ)</h3>
+          <button type="button" id="addOutcomeBtn" class="btn btn-secondary btn-xs" data-i18n="addOutcomeBtn">+ Outcome</button>
+        </div>
+
+        <div class="outcomes-header-row">
+          <span data-i18n="colLabel">Label</span>
+          <span data-i18n="colProb">Prob %</span>
+          <span><span data-i18n="colPayout">Net xᵢ</span> (<span data-currency>$</span>)</span>
+          <span></span>
+        </div>
+
+        <div id="outcomesList" class="outcomes-list"></div>
+
+        <div class="prob-summary">
+          <span><span data-i18n="probSumLbl">Total Probability:</span> <strong id="probSumValue">100.0%</strong></span>
+          <button type="button" id="normalizeBtn" class="btn btn-ghost" data-i18n="normalizeBtn">Normalize 100%</button>
+        </div>
+      </section>
+
+      <section class="input-group">
+        <h3 data-i18n="secSimSettings">2. Simulation Setup</h3>
+
+        <div class="field">
+          <div class="field-label">
+            <label for="initialBankroll" data-i18n="lblBankroll">Starting Bankroll</label>
+            <span class="unit-tag" data-currency>$</span>
+          </div>
+          <div class="field-control">
+            <input type="number" id="initialBankroll" min="0" step="50" value="1000" />
+            <input type="range" id="initialBankrollRange" min="0" max="20000" step="100" value="1000" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <label for="iterationsInput" data-i18n="lblIterations">Iterations (Trials)</label>
+            <span class="unit-tag" data-i18n="unitSteps">steps</span>
+          </div>
+          <div class="field-control">
+            <input type="number" id="iterationsInput" min="1" max="100000" step="100" value="1000" />
+            <div class="iter-pills">
+              <button type="button" class="pill-btn" data-iter="100">100</button>
+              <button type="button" class="pill-btn active" data-iter="1000">1k</button>
+              <button type="button" class="pill-btn" data-iter="10000">10k</button>
+              <button type="button" class="pill-btn" data-iter="50000">50k</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-label">
+            <label for="animSpeed" data-i18n="lblSpeed">Animation Speed</label>
+            <span class="unit-tag" id="speedTag">Fast</span>
+          </div>
+          <div class="field-control">
+            <select id="animSpeed" class="full-select">
+              <option value="slow" data-i18n="speedSlow">Slow (Visual)</option>
+              <option value="fast" selected data-i18n="speedFast">Fast (Smooth)</option>
+              <option value="turbo" data-i18n="speedTurbo">Turbo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sim-actions">
+          <button type="button" id="runInstantBtn" class="btn btn-primary" data-i18n="btnInstant">⚡ Instant Run</button>
+          <button type="button" id="runAnimBtn" class="btn btn-secondary" data-i18n="btnAnimate">▶ Animate</button>
+          <button type="button" id="stepBtn" class="btn btn-secondary" data-i18n="btnStep">+1 Step</button>
+          <button type="button" id="clearSimBtn" class="btn btn-ghost" data-i18n="btnClear">Clear</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right column: Analytics, KPIs, Charts, Table -->
+    <div class="dashboard-content">
+      <div id="healthBanner" class="health-banner status-good">
+        <div class="health-info">
+          <span class="health-dot"></span>
+          <div>
+            <strong id="healthTitle">Positive Expected Value (+EV)</strong>
+            <p id="healthDesc">Theoretical EV = +$5.00 per trial. Long-run trend favors profit.</p>
+          </div>
+        </div>
+        <div class="export-actions">
+          <button type="button" id="copyReportBtn" class="btn btn-secondary" data-i18n="btnCopy">Copy Report</button>
+          <button type="button" id="exportCsvBtn" class="btn btn-secondary">CSV</button>
+          <button type="button" id="exportJsonBtn" class="btn btn-secondary">JSON</button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <section class="kpi-grid">
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiEvTitle">Theoretical EV (Σ pᵢ·xᵢ)</span>
+          <div class="kpi-value" id="kpiTheoEv">+$5.00</div>
+          <span class="kpi-sub" id="kpiTheoTotal">Expected Profit (N): +$5,000</span>
+        </article>
+
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiActualTitle">Actual Avg Result (Simulated)</span>
+          <div class="kpi-value" id="kpiActualEv">+$4.85</div>
+          <span class="kpi-sub" id="kpiDiffEv">Deviation vs Theory: -$0.15</span>
+        </article>
+
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiStdTitle">Std. Deviation (σ) &amp; Variance</span>
+          <div class="kpi-value" id="kpiStdDev">$59.79</div>
+          <span class="kpi-sub" id="kpiVariance">Variance (σ²): 3,575</span>
+        </article>
+
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiBankrollTitle">Current Bankroll</span>
+          <div class="kpi-value" id="kpiBankroll">$5,850</div>
+          <span class="kpi-sub" id="kpiNetPnL">Simulated Net P&amp;L: +$4,850</span>
+        </article>
+
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiProgressTitle">Simulation Progress</span>
+          <div class="kpi-value" id="kpiProgress">1,000 / 1,000</div>
+          <span class="kpi-sub" id="kpiMinMax">Min: $760 • Max: $5,920</span>
+        </article>
+
+        <article class="kpi-card">
+          <span class="kpi-title" data-i18n="kpiSharpeTitle">EV / σ Ratio &amp; Win Rate</span>
+          <div class="kpi-value" id="kpiEvSigma">0.084</div>
+          <span class="kpi-sub" id="kpiWinRate">Positive Hits: 45.2% (Theo: 45.0%)</span>
+        </article>
+      </section>
+
+      <!-- Charts -->
+      <section class="charts-grid">
+        <div class="panel chart-card">
+          <div class="panel-header">
+            <h3 data-i18n="chartBankrollTitle">Bankroll Path: Actual vs. Theoretical EV</h3>
+            <span class="badge" data-i18n="chartBankrollBadge">Cumulative Balance</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="bankrollChart"></canvas>
+          </div>
+        </div>
+
+        <div class="panel chart-card">
+          <div class="panel-header">
+            <h3 data-i18n="chartConvTitle">Convergence: Sample Mean vs. Theoretical EV</h3>
+            <span class="badge" data-i18n="chartConvBadge">Law of Large Numbers</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="convergenceChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Outcome Breakdown Table -->
+      <section class="panel table-panel">
+        <div class="panel-header">
+          <h3 data-i18n="tableTitle">Outcome Breakdown: Theory vs. Practice</h3>
+          <span class="badge" data-i18n="tableBadge">Frequency &amp; Contribution</span>
+        </div>
+        <div class="table-responsive">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th data-i18n="thOutcome">Outcome</th>
+                <th data-i18n="thTheoProb">Theory Prob</th>
+                <th data-i18n="thActualProb">Actual Freq</th>
+                <th data-i18n="thHits">Hits</th>
+                <th data-i18n="thPayout">Payout (xᵢ)</th>
+                <th data-i18n="thEvContrib">EV Contribution (pᵢ·xᵢ)</th>
+              </tr>
+            </thead>
+            <tbody id="outcomesTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Info Modal -->
+  <div id="infoModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="modalTitle" data-i18n="modalTitle">Probability &amp; Expected Value (EV) Guide</h2>
+        <button type="button" id="closeModalBtn" class="btn btn-icon" aria-label="Close">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" id="modalOkBtn" class="btn btn-primary" data-i18n="modalCloseBtn">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+      <span>(C) Karlos Hakobyan</span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
